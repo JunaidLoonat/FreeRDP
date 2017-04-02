@@ -131,7 +131,7 @@ static PVOID TestSynchCritical_Main(PVOID arg)
 #endif
 		if (dwPreviousSpinCount != dwSpinCountExpected)
 		{
-			printf("CriticalSection failure: SetCriticalSectionSpinCount returned %u (expected: %u)\n", dwPreviousSpinCount, dwSpinCountExpected);
+			printf("CriticalSection failure: SetCriticalSectionSpinCount returned %"PRIu32" (expected: %"PRIu32")\n", dwPreviousSpinCount, dwSpinCountExpected);
 			goto fail;
 		}
 
@@ -156,7 +156,7 @@ static PVOID TestSynchCritical_Main(PVOID arg)
 	{
 		if (critical.RecursionCount != i)
 		{
-			printf("CriticalSection failure: RecursionCount field is %d instead of %d.\n", critical.RecursionCount, i);
+			printf("CriticalSection failure: RecursionCount field is %"PRId32" instead of %d.\n", critical.RecursionCount, i);
 			goto fail;
 		}
 		if (i%2==0)
@@ -182,7 +182,7 @@ static PVOID TestSynchCritical_Main(PVOID arg)
 		LeaveCriticalSection(&critical);
 		if (critical.RecursionCount != i)
 		{
-			printf("CriticalSection failure: RecursionCount field is %d instead of %d.\n", critical.RecursionCount, i);
+			printf("CriticalSection failure: RecursionCount field is %"PRId32" instead of %d.\n", critical.RecursionCount, i);
 			goto fail;
 		}
 		if (critical.OwningThread != (HANDLE)(i ? hMainThread : NULL))
@@ -201,6 +201,11 @@ static PVOID TestSynchCritical_Main(PVOID arg)
 	dwThreadCount = sysinfo.dwNumberOfProcessors > 1 ? sysinfo.dwNumberOfProcessors : 2;
 
 	hThreads = (HANDLE*) calloc(dwThreadCount, sizeof(HANDLE));
+	if (!hThreads)
+	{
+		printf("Problem allocating memory\n");
+		goto fail;
+	}
 
 	for (j = 0; j < TEST_SYNC_CRITICAL_TEST1_RUNS; j++)
 	{
@@ -212,8 +217,13 @@ static PVOID TestSynchCritical_Main(PVOID arg)
 
 		/* the TestSynchCritical_Test1 threads shall run until bTest1Running is FALSE */
 		bTest1Running = TRUE;
-		for (i = 0; i < (int) dwThreadCount; i++) {
-			hThreads[i] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) TestSynchCritical_Test1, &bTest1Running, 0, NULL);
+		for (i = 0; i < (int) dwThreadCount; i++)
+		{
+			if (!(hThreads[i] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) TestSynchCritical_Test1, &bTest1Running, 0, NULL)))
+			{
+				printf("CriticalSection failure: Failed to create test_1 thread #%d\n", i);
+				goto fail;
+			}
 		}
 
 		/* let it run for TEST_SYNC_CRITICAL_TEST1_RUNTIME_MS ... */
@@ -230,7 +240,7 @@ static PVOID TestSynchCritical_Main(PVOID arg)
 			GetExitCodeThread(hThreads[i], &dwThreadExitCode);
 			if(dwThreadExitCode != 0)
 			{
-				printf("CriticalSection failure: Thread #%d returned error code %u\n", i, dwThreadExitCode);
+				printf("CriticalSection failure: Thread #%d returned error code %"PRIu32"\n", i, dwThreadExitCode);
 				goto fail;
 			}
 			CloseHandle(hThreads[i]);
@@ -238,7 +248,7 @@ static PVOID TestSynchCritical_Main(PVOID arg)
 
 		if (gTestValueVulnerable != gTestValueSerialized)
 		{
-			printf("CriticalSection failure: unexpected test value %d (expected %d)\n", gTestValueVulnerable, gTestValueSerialized);
+			printf("CriticalSection failure: unexpected test value %"PRId32" (expected %"PRId32")\n", gTestValueVulnerable, gTestValueSerialized);
 			goto fail;
 		}
 
@@ -260,7 +270,11 @@ static PVOID TestSynchCritical_Main(PVOID arg)
 		goto fail;
 	}
 	/* This thread tries to call TryEnterCriticalSection which must fail */
-	hThread = CreateThread(NULL, 0,  (LPTHREAD_START_ROUTINE) TestSynchCritical_Test2, NULL, 0, NULL);
+	if (!(hThread = CreateThread(NULL, 0,  (LPTHREAD_START_ROUTINE) TestSynchCritical_Test2, NULL, 0, NULL)))
+	{
+		printf("CriticalSection failure: Failed to create test_2 thread\n");
+		goto fail;
+	}
 	if (WaitForSingleObject(hThread, INFINITE) != WAIT_OBJECT_0)
 	{
 		printf("CriticalSection failure: Failed to wait for thread\n");
@@ -269,7 +283,7 @@ static PVOID TestSynchCritical_Main(PVOID arg)
 	GetExitCodeThread(hThread, &dwThreadExitCode);
 	if(dwThreadExitCode != 0)
 	{
-		printf("CriticalSection failure: Thread returned error code %u\n", dwThreadExitCode);
+		printf("CriticalSection failure: Thread returned error code %"PRIu32"\n", dwThreadExitCode);
 		goto fail;
 	}
 	CloseHandle(hThread);
@@ -293,9 +307,13 @@ int TestSynchCritical(int argc, char* argv[])
 
 	dwDeadLockDetectionTimeMs = 2 * TEST_SYNC_CRITICAL_TEST1_RUNTIME_MS * TEST_SYNC_CRITICAL_TEST1_RUNS;
 
-	printf("Deadlock will be assumed after %u ms.\n", dwDeadLockDetectionTimeMs);
+	printf("Deadlock will be assumed after %"PRIu32" ms.\n", dwDeadLockDetectionTimeMs);
 
-	hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) TestSynchCritical_Main, &bThreadTerminated, 0, NULL);
+	if (!(hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) TestSynchCritical_Main, &bThreadTerminated, 0, NULL)))
+	{
+		printf("CriticalSection failure: Failed to create main thread\n");
+		return -1;
+	}
 
 	/**
 	 * We have to be able to detect dead locks in this test.

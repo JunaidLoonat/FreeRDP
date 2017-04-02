@@ -18,16 +18,19 @@ int TestListDictionary(int argc, char* argv[])
 	wListDictionary* list;
 
 	list = ListDictionary_New(TRUE);
+	if (!list)
+		return -1;
 
-	ListDictionary_Add(list, key1, val1);
-	ListDictionary_Add(list, key2, val2);
-	ListDictionary_Add(list, key3, val3);
+	if (!ListDictionary_Add(list, key1, val1) ||
+			!ListDictionary_Add(list, key2, val2) ||
+			!ListDictionary_Add(list, key3, val3) )
+		return -1;
 
 	count = ListDictionary_Count(list);
 
 	if (count != 3)
 	{
-		printf("ListDictionary_Count: Expected : %d, Actual: %d\n", 3, count);
+		printf("ListDictionary_Count: Expected : 3, Actual: %d\n", count);
 		return -1;
 	}
 
@@ -37,7 +40,7 @@ int TestListDictionary(int argc, char* argv[])
 
 	if (count != 2)
 	{
-		printf("ListDictionary_Count: Expected : %d, Actual: %d\n", 2, count);
+		printf("ListDictionary_Count: Expected : 2, Actual: %d\n", count);
 		return -1;
 	}
 
@@ -47,7 +50,7 @@ int TestListDictionary(int argc, char* argv[])
 
 	if (count != 1)
 	{
-		printf("ListDictionary_Count: Expected : %d, Actual: %d\n", 1, count);
+		printf("ListDictionary_Count: Expected : 1, Actual: %d\n", count);
 		return -1;
 	}
 
@@ -57,19 +60,20 @@ int TestListDictionary(int argc, char* argv[])
 
 	if (count != 0)
 	{
-		printf("ListDictionary_Count: Expected : %d, Actual: %d\n", 0, count);
+		printf("ListDictionary_Count: Expected : 0, Actual: %d\n", count);
 		return -1;
 	}
 
-	ListDictionary_Add(list, key1, val1);
-	ListDictionary_Add(list, key2, val2);
-	ListDictionary_Add(list, key3, val3);
+	if (!ListDictionary_Add(list, key1, val1) ||
+			!ListDictionary_Add(list, key2, val2) ||
+			!ListDictionary_Add(list, key3, val3))
+		return -1;
 
 	count = ListDictionary_Count(list);
 
 	if (count != 3)
 	{
-		printf("ListDictionary_Count: Expected : %d, Actual: %d\n", 3, count);
+		printf("ListDictionary_Count: Expected : 3, Actual: %d\n", count);
 		return -1;
 	}
 
@@ -77,8 +81,8 @@ int TestListDictionary(int argc, char* argv[])
 
 	if (strcmp(value, val1) != 0)
 	{
-		printf("ListDictionary_GetItemValue: Expected : %d, Actual: %d\n",
-				(int) (size_t) val1, (int) (size_t) value);
+		printf("ListDictionary_GetItemValue: Expected : %"PRIuz", Actual: %"PRIuz"\n",
+				(size_t) val1, (size_t) value);
 		return -1;
 	}
 
@@ -86,8 +90,8 @@ int TestListDictionary(int argc, char* argv[])
 
 	if (strcmp(value, val2) != 0)
 	{
-		printf("ListDictionary_GetItemValue: Expected : %d, Actual: %d\n",
-				(int) (size_t) val2, (int) (size_t) value);
+		printf("ListDictionary_GetItemValue: Expected : %"PRIuz", Actual: %"PRIuz"\n",
+				(size_t) val2, (size_t) value);
 		return -1;
 	}
 
@@ -95,8 +99,8 @@ int TestListDictionary(int argc, char* argv[])
 
 	if (strcmp(value, val3) != 0)
 	{
-		printf("ListDictionary_GetItemValue: Expected : %d, Actual: %d\n",
-				(int) (size_t) val3, (int) (size_t) value);
+		printf("ListDictionary_GetItemValue: Expected : %"PRIuz", Actual: %"PRIuz"\n",
+				(size_t) val3, (size_t) value);
 		return -1;
 	}
 
@@ -112,19 +116,19 @@ int TestListDictionary(int argc, char* argv[])
 
 	if (!ListDictionary_Contains(list, key2))
 	{
-		printf("ListDictionary_Contains: Expected : %d, Actual: %d\n", TRUE, FALSE);
+		printf("ListDictionary_Contains: Expected : TRUE, Actual: FALSE\n");
 		return -1;
 	}
 
 	if (!ListDictionary_Remove(list, key2))
 	{
-		printf("ListDictionary_Remove: Expected : %d, Actual: %d\n", TRUE, FALSE);
+		printf("ListDictionary_Remove: Expected : TRUE, Actual: FALSE\n");
 		return -1;
 	}
 
 	if (ListDictionary_Remove(list, key2))
 	{
-		printf("ListDictionary_Remove: Expected : %d, Actual: %d\n", FALSE, TRUE);
+		printf("ListDictionary_Remove: Expected : FALSE, Actual: TRUE\n");
 		return -1;
 	}
 
@@ -151,9 +155,9 @@ int TestListDictionary(int argc, char* argv[])
 		return -1;
 	}
 
-	ListDictionary_Add(list, key1, val1);
-	ListDictionary_Add(list, key2, val2);
-	ListDictionary_Add(list, key3, val3);
+	if (!ListDictionary_Add(list, key1, val1) || !ListDictionary_Add(list, key2, val2) ||
+			!ListDictionary_Add(list, key3, val3))
+		return -1;
 
 	ListDictionary_Clear(list);
 
@@ -161,7 +165,7 @@ int TestListDictionary(int argc, char* argv[])
 
 	if (count != 0)
 	{
-		printf("ListDictionary_Count: Expected : %d, Actual: %d\n", 0, count);
+		printf("ListDictionary_Count: Expected : 0, Actual: %d\n", count);
 		return -1;
 	}
 

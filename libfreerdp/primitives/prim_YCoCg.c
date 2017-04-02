@@ -25,97 +25,56 @@
 #include <freerdp/primitives.h>
 
 #include "prim_internal.h"
-#include "prim_YCoCg.h"
-
-#ifndef MINMAX
-#define MINMAX(_v_, _l_, _h_) \
-	((_v_) < (_l_) ? (_l_) : ((_v_) > (_h_) ? (_h_) : (_v_)))
-#endif /* !MINMAX */
 
 /* ------------------------------------------------------------------------- */
-pstatus_t general_YCoCgRToRGB_8u_AC4R(
-	const BYTE *pSrc, INT32 srcStep,
-	BYTE *pDst, INT32 dstStep,
-	UINT32 width, UINT32 height,
-	UINT8 shift,
-	BOOL withAlpha,
-	BOOL invert)
+static pstatus_t general_YCoCgToRGB_8u_AC4R(
+    const BYTE* pSrc, INT32 srcStep,
+    BYTE* pDst, UINT32 DstFormat, INT32 dstStep,
+    UINT32 width, UINT32 height,
+    UINT8 shift,
+    BOOL withAlpha)
 {
-	const BYTE *sptr = pSrc;
-	BYTE *dptr = pDst;
+	BYTE A;
+	UINT32 x, y;
+	BYTE* dptr = pDst;
+	const BYTE* sptr = pSrc;
+	INT16 Cg, Co, Y, T, R, G, B;
+	const DWORD formatSize = GetBytesPerPixel(DstFormat);
+	fkt_writePixel writePixel = getPixelWriteFunction(DstFormat);
 	int cll = shift - 1;  /* -1 builds in the /2's */
-	int x,y;
-	int srcRowBump = srcStep - width*sizeof(UINT32);
-	int dstRowBump = dstStep - width*sizeof(UINT32);
-	if (invert)
-	{
-		for (y=0; y<height; y++)
-		{
-			for (x=0; x<width; x++)
-			{
-				INT16 cg, co, y, t, r, g, b;
-				BYTE a;
+	UINT32 srcPad = srcStep - (width * 4);
+	UINT32 dstPad = dstStep - (width * formatSize);
 
-				/* Note: shifts must be done before sign-conversion. */
-				cg = (INT16) ((INT8) ((*sptr++) << cll));
-				co = (INT16) ((INT8) ((*sptr++) << cll));
-				y = (INT16) (*sptr++);	/* UINT8->INT16 */
-				a = *sptr++;
-				if (!withAlpha) a = 0xFFU;
-				t  = y - cg;
-				r  = t + co;
-				g  = y + cg;
-				b  = t - co;
-				*dptr++ = (BYTE) MINMAX(r, 0, 255);
-				*dptr++ = (BYTE) MINMAX(g, 0, 255);
-				*dptr++ = (BYTE) MINMAX(b, 0, 255);
-				*dptr++ = a;
-			}
-			sptr += srcRowBump;
-			dptr += dstRowBump;
-		}
-	}
-	else
+	for (y = 0; y < height; y++)
 	{
-		for (y=0; y<height; y++)
+		for (x = 0; x < width; x++)
 		{
-			for (x=0; x<width; x++)
-			{
-				INT16 cg, co, y, t, r, g, b;
-				BYTE a;
+			/* Note: shifts must be done before sign-conversion. */
+			Cg = (INT16)((INT8)((*sptr++) << cll));
+			Co = (INT16)((INT8)((*sptr++) << cll));
+			Y = (INT16)(*sptr++);	/* UINT8->INT16 */
+			A = *sptr++;
 
-				/* Note: shifts must be done before sign-conversion. */
-				cg = (INT16) ((INT8) ((*sptr++) << cll));
-				co = (INT16) ((INT8) ((*sptr++) << cll));
-				y = (INT16) (*sptr++);	/* UINT8->INT16 */
-				a = *sptr++;
-				if (!withAlpha) a = 0xFFU;
-				t  = y - cg;
-				r  = t + co;
-				g  = y + cg;
-				b  = t - co;
-				*dptr++ = (BYTE) MINMAX(b, 0, 255);
-				*dptr++ = (BYTE) MINMAX(g, 0, 255);
-				*dptr++ = (BYTE) MINMAX(r, 0, 255);
-				*dptr++ = a;
-			}
-			sptr += srcRowBump;
-			dptr += dstRowBump;
+			if (!withAlpha)
+				A = 0xFFU;
+
+			T  = Y - Cg;
+			R  = T + Co;
+			G  = Y + Cg;
+			B  = T - Co;
+			dptr = (*writePixel)(dptr, formatSize, DstFormat, CLIP(R),
+			                     CLIP(G), CLIP(B), A);
 		}
+
+		sptr += srcPad;
+		dptr += dstPad;
 	}
+
 	return PRIMITIVES_SUCCESS;
 }
 
 /* ------------------------------------------------------------------------- */
 void primitives_init_YCoCg(primitives_t* prims)
 {
-	prims->YCoCgRToRGB_8u_AC4R = general_YCoCgRToRGB_8u_AC4R;
-
-	primitives_init_YCoCg_opt(prims);
-}
-
-/* ------------------------------------------------------------------------- */
-void primitives_deinit_YCoCg(primitives_t* prims)
-{
-	/* Nothing to do. */
+	prims->YCoCgToRGB_8u_AC4R = general_YCoCgToRGB_8u_AC4R;
 }

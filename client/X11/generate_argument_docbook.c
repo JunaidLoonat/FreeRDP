@@ -26,7 +26,7 @@ LPSTR tr_esc_str(LPCSTR arg)
 		tmp = (LPSTR)realloc(tmp, ds * sizeof(CHAR));
 	if(NULL == tmp)
 	{
-		fprintf(stderr, "Could not allocate string buffer.");
+		WLog_ERR(TAG,  "Could not allocate string buffer.");
 		exit(-2);
 	}
 	/* Copy character for character and check, if it is necessary to escape. */
@@ -40,7 +40,7 @@ LPSTR tr_esc_str(LPCSTR arg)
 				tmp = (LPSTR)realloc(tmp, ds * sizeof(CHAR));
 				if(NULL == tmp)
 				{
-					fprintf(stderr, "Could not reallocate string buffer.");
+					WLog_ERR(TAG,  "Could not reallocate string buffer.");
 					exit(-3);
 				}
 				tmp[cs++] = '&';
@@ -53,7 +53,7 @@ LPSTR tr_esc_str(LPCSTR arg)
 				tmp = (LPSTR)realloc(tmp, ds * sizeof(CHAR));
 				if(NULL == tmp)
 				{
-					fprintf(stderr, "Could not reallocate string buffer.");
+					WLog_ERR(TAG,  "Could not reallocate string buffer.");
 					exit(-4);
 				}
 				tmp[cs++] = '&';
@@ -66,7 +66,7 @@ LPSTR tr_esc_str(LPCSTR arg)
 				tmp = (LPSTR)realloc(tmp, ds * sizeof(CHAR));
 				if(NULL == tmp)
 				{
-					fprintf(stderr, "Could not reallocate string buffer.");
+					WLog_ERR(TAG,  "Could not reallocate string buffer.");
 					exit(-5);
 				}
 				tmp[cs++] = '&';
@@ -81,7 +81,7 @@ LPSTR tr_esc_str(LPCSTR arg)
 				tmp = (LPSTR)realloc(tmp, ds * sizeof(CHAR));
 				if(NULL == tmp)
 				{
-					fprintf(stderr, "Could not reallocate string buffer.");
+					WLog_ERR(TAG,  "Could not reallocate string buffer.");
 					exit(-6);
 				}
 				tmp[cs++] = '&';
@@ -96,7 +96,7 @@ LPSTR tr_esc_str(LPCSTR arg)
 				tmp = (LPSTR)realloc(tmp, ds * sizeof(CHAR));
 				if(NULL == tmp)
 				{
-					fprintf(stderr, "Could not reallocate string buffer.");
+					WLog_ERR(TAG,  "Could not reallocate string buffer.");
 					exit(-7);
 				}
 				tmp[cs++] = '&';
@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
 	fp = fopen(fname, "w");
 	if(NULL == fp)
 	{
-		fprintf(stderr, "Could not open '%s' for writing.", fname);
+		WLog_ERR(TAG,  "Could not open '%s' for writing.", fname);
 		return -1;
 	}
 	/* The tag used as header in the manpage */
@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
 	 * compatible XML */
 	if(elements < 2)
 	{
-		fprintf(stderr, "The argument array 'args' is empty, writing an empty file.");
+		WLog_ERR(TAG,  "The argument array 'args' is empty, writing an empty file.");
 		elements = 1;
 	}
 	for(x=0; x<elements - 1; x++)
@@ -146,13 +146,25 @@ int main(int argc, char *argv[])
 		const char *format = tr_esc_str(arg->Format);
 		const char *text = tr_esc_str((LPSTR) arg->Text);
 		fprintf(fp, "\t\t\t<varlistentry>\n");
-		if(COMMAND_LINE_VALUE_REQUIRED == arg->Flags)
-			fprintf(fp, "\t\t\t\t<term><option>/%s</option> <replaceable>%s</replaceable></term>\n", name, format);
-		else
-			fprintf(fp, "\t\t\t\t<term><option>/%s</option></term>\n", name);
-		fprintf(fp, "\t\t\t\t<listitem>\n");
-		fprintf(fp, "\t\t\t\t\t<para>%s</para>\n", format);
-		fprintf(fp, "\t\t\t\t</listitem>\n");
+
+		fprintf(fp, "\t\t\t\t<term><option>/%s</option>", name);
+		if ((arg->Flags == COMMAND_LINE_VALUE_REQUIRED) && format)
+			fprintf(fp, " <replaceable>%s</replaceable>\n", format);
+		fprintf(fp, "</term>\n");
+
+		if (format || text)
+		{
+			fprintf(fp, "\t\t\t\t<listitem>\n");
+			fprintf(fp, "\t\t\t\t\t<para>%s\n", format ? format : "");
+			if (text)
+			{
+				if (format)
+					fprintf(fp, " - ");
+				fprintf(fp, "%s", text);
+			}
+			fprintf(fp, "</para>\n");
+			fprintf(fp, "\t\t\t\t</listitem>\n");
+		}
 		fprintf(fp, "\t\t\t</varlistentry>\n");
 		free((void*) name);
 		free((void*) format);

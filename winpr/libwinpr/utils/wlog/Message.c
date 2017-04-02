@@ -25,9 +25,9 @@
 #include <winpr/path.h>
 #include <winpr/file.h>
 
-#include <winpr/wlog.h>
+#include "wlog.h"
 
-#include "wlog/Message.h"
+#include "Message.h"
 
 char* WLog_Message_GetOutputFileName(int id, const char* ext)
 {
@@ -36,19 +36,27 @@ char* WLog_Message_GetOutputFileName(int id, const char* ext)
 	char* FileName;
 	char* FullFileName;
 
-	ProcessId = GetCurrentProcessId();
+
+	if (!(FileName = (char*) malloc(256)))
+		return NULL;
 
 	FilePath = GetKnownSubPath(KNOWN_PATH_TEMP, "wlog");
 
 	if (!PathFileExistsA(FilePath))
-		CreateDirectoryA(FilePath, NULL);
+	{
+		if (!PathMakePathA(FilePath, NULL))
+		{
+			free(FileName);
+			free(FilePath);
+			return NULL;
+		}
+	}
 
-	FileName = (char*) malloc(256);
-
+	ProcessId = GetCurrentProcessId();
 	if (id >= 0)
-		sprintf_s(FileName, 256, "%u-%d.%s", (unsigned int) ProcessId, id, ext);
+		sprintf_s(FileName, 256, "%"PRIu32"-%d.%s", ProcessId, id, ext);
 	else
-		sprintf_s(FileName, 256, "%u.%s", (unsigned int) ProcessId, ext);
+		sprintf_s(FileName, 256, "%"PRIu32".%s", ProcessId, ext);
 
 	FullFileName = GetCombinedPath(FilePath, FileName);
 

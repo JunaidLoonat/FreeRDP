@@ -19,6 +19,7 @@
  */
 
 #include <winpr/crt.h>
+#include <winpr/wlog.h>
 #include <winpr/synch.h>
 #include <winpr/thread.h>
 #include <winpr/interlocked.h>
@@ -43,7 +44,7 @@ static void* test_error_thread(void* arg)
 		SetLastError(dwErrorSet);
 		if ((dwErrorGet = GetLastError()) != dwErrorSet)
 		{
-			printf("GetLastError() failure (thread %d): Expected: 0x%04X, Actual: 0x%04X\n",
+			printf("GetLastError() failure (thread %d): Expected: 0x%08"PRIX32", Actual: 0x%08"PRIX32"\n",
 				id, dwErrorSet, dwErrorGet);
 			if (!status)
 				status = -1;
@@ -59,6 +60,12 @@ int TestErrorSetLastError(int argc, char* argv[])
 {
 	DWORD error;
 	HANDLE threads[4];
+	int i;
+
+	/* We must initialize WLog here. It will check for settings
+	 * in the environment and if the variables are not set, the last
+	 * error state is changed... */
+	WLog_GetRoot();
 
 	SetLastError(ERROR_ACCESS_DENIED);
 
@@ -66,18 +73,27 @@ int TestErrorSetLastError(int argc, char* argv[])
 
 	if (error != ERROR_ACCESS_DENIED)
 	{
-		printf("GetLastError() failure: Expected: 0x%04X, Actual: 0x%04X\n",
+		printf("GetLastError() failure: Expected: 0x%08X, Actual: 0x%08"PRIX32"\n",
 				ERROR_ACCESS_DENIED, error);
 		return -1;
 	}
 
 	pLoopCount = _aligned_malloc(sizeof(LONG), sizeof(LONG));
+	if (!pLoopCount)
+	{
+		printf("Unable to allocate memory\n");
+		return -1;
+	}
 	*pLoopCount = 0;
 
-	threads[0] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) test_error_thread, (void*) (size_t) 0, 0, NULL);
-	threads[1] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) test_error_thread, (void*) (size_t) 1, 0, NULL);
-	threads[2] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) test_error_thread, (void*) (size_t) 2, 0, NULL);
-	threads[3] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) test_error_thread, (void*) (size_t) 3, 0, NULL);
+	for (i = 0; i < 4; i++)
+	{
+		if (!(threads[i] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) test_error_thread, (void*) (size_t) 0, 0, NULL)))
+		{
+			printf("Failed to create thread #%d\n", i);
+			return -1;
+		}
+	}
 
 	// let the threads run for at least 2 seconds
 	Sleep(2000);
@@ -97,7 +113,7 @@ int TestErrorSetLastError(int argc, char* argv[])
 
 	if (error != ERROR_ACCESS_DENIED)
 	{
-		printf("GetLastError() failure: Expected: 0x%04X, Actual: 0x%04X\n",
+		printf("GetLastError() failure: Expected: 0x%08X, Actual: 0x%08"PRIX32"\n",
 				ERROR_ACCESS_DENIED, error);
 		return -1;
 	}
@@ -108,7 +124,7 @@ int TestErrorSetLastError(int argc, char* argv[])
 		return -1;
 	}
 
-	printf("Completed %d iterations.\n", *pLoopCount);
+	printf("Completed %"PRId32" iterations.\n", *pLoopCount);
 
 	return status;
 }

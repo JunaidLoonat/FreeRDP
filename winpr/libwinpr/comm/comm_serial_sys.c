@@ -30,9 +30,18 @@
 #include <unistd.h>
 
 #include "comm_serial_sys.h"
+#ifdef __UCLIBC__
+#include "comm.h"
+#endif
 
 #include <winpr/crt.h>
 #include <winpr/wlog.h>
+
+/* Undocumented flag, not supported everywhere.
+ * Provide a sensible fallback to avoid compilation problems. */
+#ifndef CMSPAR
+#define CMSPAR 010000000000
+#endif
 
 /* hard-coded in N_TTY */
 #define TTY_THRESHOLD_THROTTLE		128 /* now based on remaining room */
@@ -40,75 +49,113 @@
 #define N_TTY_BUF_SIZE			4096
 
 
+#define _BAUD_TABLE_END	0010020	/* __MAX_BAUD + 1 */
 
-/*
- * Linux, Windows speeds
- *
+/* 0: B* (Linux termios)
+ * 1: CBR_* or actual baud rate
+ * 2: BAUD_* (identical to SERIAL_BAUD_*)
  */
-static const speed_t _SERIAL_SYS_BAUD_TABLE[][2] = {
+static const speed_t _BAUD_TABLE[][3] = {
 #ifdef B0
-	{B0, 0},	/* hang up */
+	{B0, 0, 0},	/* hang up */
 #endif
-/* #ifdef B50 */
-/* 	{B50, },	/\* undefined by serial.sys *\/  */
-/* #endif */
+#ifdef B50
+	{B50, 50, 0},
+#endif
 #ifdef B75
-	{B75, SERIAL_BAUD_075},
+	{B75, 75, BAUD_075},
 #endif
 #ifdef B110
-	{B110, SERIAL_BAUD_110},
+	{B110, CBR_110, BAUD_110},
 #endif
-/* #ifdef  B134 */
-/* 	{B134, SERIAL_BAUD_134_5}, /\* TODO: might be the same? *\/ */
-/* #endif */
+#ifdef  B134
+	{B134, 134, 0 /*BAUD_134_5*/},
+#endif
 #ifdef  B150
-	{B150, SERIAL_BAUD_150},
+	{B150, 150, BAUD_150},
 #endif
-/* #ifdef B200 */
-/* 	{B200, },	/\* undefined by serial.sys *\/ */
-/* #endif */
+#ifdef B200
+	{B200, 200, 0},
+#endif
 #ifdef B300
-	{B300, SERIAL_BAUD_300},
+	{B300, CBR_300, BAUD_300},
 #endif
 #ifdef B600
-	{B600, SERIAL_BAUD_600},
+	{B600, CBR_600, BAUD_600},
 #endif
 #ifdef B1200
-	{B1200, SERIAL_BAUD_1200},
+	{B1200, CBR_1200, BAUD_1200},
 #endif
 #ifdef B1800
-	{B1800, SERIAL_BAUD_1800},
+	{B1800, 1800, BAUD_1800},
 #endif
 #ifdef B2400
-	{B2400, SERIAL_BAUD_2400},
+	{B2400, CBR_2400, BAUD_2400},
 #endif
 #ifdef B4800
-	{B4800, SERIAL_BAUD_4800},
+	{B4800, CBR_4800, BAUD_4800},
 #endif
-	/* {, SERIAL_BAUD_7200} /\* undefined on Linux *\/ */
+	/* {, ,BAUD_7200} */
 #ifdef B9600
-	{B9600, SERIAL_BAUD_9600},
+	{B9600, CBR_9600, BAUD_9600},
 #endif
-	/* {, SERIAL_BAUD_14400} /\* undefined on Linux *\/ */
+	/* {, CBR_14400, BAUD_14400},	/\* unsupported on Linux *\/ */
 #ifdef B19200
-	{B19200, SERIAL_BAUD_19200},
+	{B19200, CBR_19200, BAUD_19200},
 #endif
 #ifdef B38400
-	{B38400, SERIAL_BAUD_38400},
+	{B38400, CBR_38400, BAUD_38400},
 #endif
-/* 	{, SERIAL_BAUD_56K},	/\* undefined on Linux *\/ */
+	/* {, CBR_56000, BAUD_56K},	/\* unsupported on Linux *\/ */
 #ifdef  B57600
-	{B57600, SERIAL_BAUD_57600},
+	{B57600, CBR_57600, BAUD_57600},
 #endif
-	/* {, SERIAL_BAUD_128K} /\* undefined on Linux *\/ */
 #ifdef B115200
-	{B115200, SERIAL_BAUD_115200},	/* _SERIAL_MAX_BAUD */
+	{B115200, CBR_115200, BAUD_115200},
 #endif
-
-	/* no greater speed defined by serial.sys */
+	/* {, CBR_128000, BAUD_128K},	/\* unsupported on Linux *\/ */
+	/* {, CBR_256000, BAUD_USER},	/\* unsupported on Linux *\/ */
+#ifdef B230400
+	{B230400, 230400, BAUD_USER},
+#endif
+#ifdef B460800
+	{B460800, 460800, BAUD_USER},
+#endif
+#ifdef B500000
+	{B500000, 500000, BAUD_USER},
+#endif
+#ifdef  B576000
+	{B576000, 576000, BAUD_USER},
+#endif
+#ifdef B921600
+	{B921600, 921600, BAUD_USER},
+#endif
+#ifdef B1000000
+	{B1000000, 1000000, BAUD_USER},
+#endif
+#ifdef B1152000
+	{B1152000, 1152000, BAUD_USER},
+#endif
+#ifdef B1500000
+	{B1500000, 1500000, BAUD_USER},
+#endif
+#ifdef B2000000
+	{B2000000, 2000000, BAUD_USER},
+#endif
+#ifdef B2500000
+	{B2500000, 2500000, BAUD_USER},
+#endif
+#ifdef B3000000
+	{B3000000, 3000000, BAUD_USER},
+#endif
+#ifdef B3500000
+	{B3500000, 3500000, BAUD_USER},
+#endif
+#ifdef B4000000
+	{B4000000, 4000000, BAUD_USER},	/* __MAX_BAUD */
+#endif
+	{_BAUD_TABLE_END, 0, 0}
 };
-
-#define _SERIAL_MAX_BAUD  B115200
 
 
 static BOOL _get_properties(WINPR_COMM *pComm, COMMPROP *pProperties)
@@ -139,7 +186,8 @@ static BOOL _get_properties(WINPR_COMM *pComm, COMMPROP *pProperties)
 	pProperties->dwMaxTxQueue = N_TTY_BUF_SIZE;
 	pProperties->dwMaxRxQueue = N_TTY_BUF_SIZE;
 
-	pProperties->dwMaxBaud = SERIAL_BAUD_115200; /* _SERIAL_MAX_BAUD */
+	/* FIXME: to be probe on the device? */
+	pProperties->dwMaxBaud = BAUD_USER; 
 
 	/* FIXME: what about PST_RS232? see also: serial_struct */
 	pProperties->dwProvSubType = PST_UNSPECIFIED;
@@ -153,9 +201,9 @@ static BOOL _get_properties(WINPR_COMM *pComm, COMMPROP *pProperties)
 	pProperties->dwSettableParams = SP_BAUD | SP_DATABITS | SP_HANDSHAKING | SP_PARITY | SP_PARITY_CHECK | /*SP_RLSD |*/ SP_STOPBITS;
 
 	pProperties->dwSettableBaud = 0;
-	for (i=0; _SERIAL_SYS_BAUD_TABLE[i][0]<=_SERIAL_MAX_BAUD; i++)
+	for (i=0; _BAUD_TABLE[i][0]<_BAUD_TABLE_END; i++)
 	{
-		pProperties->dwSettableBaud |= _SERIAL_SYS_BAUD_TABLE[i][1];
+		pProperties->dwSettableBaud |= _BAUD_TABLE[i][2];
 	}
 
 	pProperties->wSettableData = DATABITS_5 | DATABITS_6 | DATABITS_7 | DATABITS_8 /*| DATABITS_16 | DATABITS_16X*/;
@@ -177,29 +225,31 @@ static BOOL _set_baud_rate(WINPR_COMM *pComm, const SERIAL_BAUD_RATE *pBaudRate)
 {
 	int i;
 	speed_t newSpeed;
-	struct termios upcomingTermios;
+	struct termios futureState;
 
-	ZeroMemory(&upcomingTermios, sizeof(struct termios));
-	if (tcgetattr(pComm->fd, &upcomingTermios) < 0)
+	ZeroMemory(&futureState, sizeof(struct termios));
+	if (tcgetattr(pComm->fd, &futureState) < 0) /* NB: preserves current settings not directly handled by the Communication Functions */
 	{
 		SetLastError(ERROR_IO_DEVICE);
 		return FALSE;
 	}
 
-	for (i=0; _SERIAL_SYS_BAUD_TABLE[i][0]<=_SERIAL_MAX_BAUD; i++)
+	for (i=0; _BAUD_TABLE[i][0]<_BAUD_TABLE_END; i++)
 	{
-		if (_SERIAL_SYS_BAUD_TABLE[i][1] == pBaudRate->BaudRate)
+		if (_BAUD_TABLE[i][1] == pBaudRate->BaudRate)
 		{
-			newSpeed = _SERIAL_SYS_BAUD_TABLE[i][0];
-			if (cfsetspeed(&upcomingTermios, newSpeed) < 0)
+			newSpeed = _BAUD_TABLE[i][0];
+			if (cfsetspeed(&futureState, newSpeed) < 0)
 			{
-				CommLog_Print(WLOG_WARN, "failed to set speed %u (%lu)", newSpeed, pBaudRate->BaudRate);
+				CommLog_Print(WLOG_WARN, "failed to set speed 0x%x (%"PRIu32")", newSpeed, pBaudRate->BaudRate);
 				return FALSE;
 			}
 
-			if (_comm_ioctl_tcsetattr(pComm->fd, TCSANOW, &upcomingTermios) < 0)
+			assert(cfgetispeed(&futureState) == newSpeed);
+
+			if (_comm_ioctl_tcsetattr(pComm->fd, TCSANOW, &futureState) < 0)
 			{
-				CommLog_Print(WLOG_WARN, "_comm_ioctl_tcsetattr failure: last-error: 0x%lX", GetLastError());
+				CommLog_Print(WLOG_WARN, "_comm_ioctl_tcsetattr failure: last-error: 0x%"PRIX32"", GetLastError());
 				return FALSE;
 			}
 
@@ -207,7 +257,7 @@ static BOOL _set_baud_rate(WINPR_COMM *pComm, const SERIAL_BAUD_RATE *pBaudRate)
 		}
 	}
 
-	CommLog_Print(WLOG_WARN, "could not find a matching speed for the baud rate %lu", pBaudRate->BaudRate);
+	CommLog_Print(WLOG_WARN, "could not find a matching speed for the baud rate %"PRIu32"", pBaudRate->BaudRate);
 	SetLastError(ERROR_INVALID_DATA);
 	return FALSE;
 }
@@ -228,11 +278,11 @@ static BOOL _get_baud_rate(WINPR_COMM *pComm, SERIAL_BAUD_RATE *pBaudRate)
 
 	currentSpeed = cfgetispeed(&currentState);
 
-	for (i=0; _SERIAL_SYS_BAUD_TABLE[i][0]<=_SERIAL_MAX_BAUD; i++)
+	for (i=0; _BAUD_TABLE[i][0]<_BAUD_TABLE_END; i++)
 	{
-		if (_SERIAL_SYS_BAUD_TABLE[i][0] == currentSpeed)
+		if (_BAUD_TABLE[i][0] == currentSpeed)
 		{
-			pBaudRate->BaudRate = _SERIAL_SYS_BAUD_TABLE[i][1];
+			pBaudRate->BaudRate = _BAUD_TABLE[i][1];
 			return TRUE;
 		}
 	}
@@ -241,6 +291,7 @@ static BOOL _get_baud_rate(WINPR_COMM *pComm, SERIAL_BAUD_RATE *pBaudRate)
 	SetLastError(ERROR_INVALID_DATA);
 	return FALSE;
 }
+
 
 /**
  * NOTE: Only XonChar and XoffChar are plenty supported with the Linux
@@ -283,7 +334,7 @@ static BOOL _set_serial_chars(WINPR_COMM *pComm, const SERIAL_CHARS *pSerialChar
 	 */
 	if (pSerialChars->EofChar != '\0')
 	{
-		CommLog_Print(WLOG_WARN, "EofChar='%c' cannot be set\n", pSerialChars->EofChar);
+		CommLog_Print(WLOG_WARN, "EofChar %02"PRIX8" cannot be set\n", pSerialChars->EofChar);
 		SetLastError(ERROR_NOT_SUPPORTED);
 		result = FALSE; /* but keep on */
 	}
@@ -296,7 +347,7 @@ static BOOL _set_serial_chars(WINPR_COMM *pComm, const SERIAL_CHARS *pSerialChar
 	/* FIXME: see also: _set_handflow() */
 	if (pSerialChars->ErrorChar != '\0')
 	{
-		CommLog_Print(WLOG_WARN, "ErrorChar='%c' (0x%x) cannot be set (unsupported).\n", pSerialChars->ErrorChar, pSerialChars->ErrorChar);
+		CommLog_Print(WLOG_WARN, "ErrorChar 0x%02"PRIX8" ('%c') cannot be set (unsupported).\n", pSerialChars->ErrorChar, (char) pSerialChars->ErrorChar);
 		SetLastError(ERROR_NOT_SUPPORTED);
 		result = FALSE; /* but keep on */
 	}
@@ -304,7 +355,7 @@ static BOOL _set_serial_chars(WINPR_COMM *pComm, const SERIAL_CHARS *pSerialChar
 	/* FIXME: see also: _set_handflow() */
 	if (pSerialChars->BreakChar != '\0')
 	{
-		CommLog_Print(WLOG_WARN, "BreakChar='%c' (0x%x) cannot be set (unsupported).\n", pSerialChars->BreakChar, pSerialChars->BreakChar);
+		CommLog_Print(WLOG_WARN, "BreakChar 0x%02"PRIX8" ('%c') cannot be set (unsupported).\n", pSerialChars->BreakChar, (char) pSerialChars->BreakChar);
 		SetLastError(ERROR_NOT_SUPPORTED);
 		result = FALSE; /* but keep on */
 	}
@@ -312,7 +363,7 @@ static BOOL _set_serial_chars(WINPR_COMM *pComm, const SERIAL_CHARS *pSerialChar
 	/* FIXME: could be implemented during read/write I/O. What about ISIG? */
 	if (pSerialChars->EventChar != '\0')
 	{
-		CommLog_Print(WLOG_WARN, "EventChar='%c' (0x%x) cannot be set\n", pSerialChars->EventChar, pSerialChars->EventChar);
+		CommLog_Print(WLOG_WARN, "EventChar 0x%02"PRIX8" ('%c') cannot be set\n", pSerialChars->EventChar, (char) pSerialChars->EventChar);
 		SetLastError(ERROR_NOT_SUPPORTED);
 		result = FALSE; /* but keep on */
 	}
@@ -324,7 +375,7 @@ static BOOL _set_serial_chars(WINPR_COMM *pComm, const SERIAL_CHARS *pSerialChar
 
 	if (_comm_ioctl_tcsetattr(pComm->fd, TCSANOW, &upcomingTermios) < 0)
 	{
-		CommLog_Print(WLOG_WARN, "_comm_ioctl_tcsetattr failure: last-error: 0x%lX", GetLastError());
+		CommLog_Print(WLOG_WARN, "_comm_ioctl_tcsetattr failure: last-error: 0x%08"PRIX32"", GetLastError());
 		return FALSE;
 	}
 
@@ -402,7 +453,7 @@ static BOOL _set_line_control(WINPR_COMM *pComm, const SERIAL_LINE_CONTROL *pLin
 			break;
 
 		default:
-			CommLog_Print(WLOG_WARN, "unexpected number of stop bits: %d\n", pLineControl->StopBits);
+			CommLog_Print(WLOG_WARN, "unexpected number of stop bits: %"PRIu8"\n", pLineControl->StopBits);
 			result = FALSE; /* but keep on */
 			break;
 	}
@@ -434,7 +485,7 @@ static BOOL _set_line_control(WINPR_COMM *pComm, const SERIAL_LINE_CONTROL *pLin
 			break;
 
 		default:
-			CommLog_Print(WLOG_WARN, "unexpected type of parity: %d\n", pLineControl->Parity);
+			CommLog_Print(WLOG_WARN, "unexpected type of parity: %"PRIu8"\n", pLineControl->Parity);
 			result = FALSE; /* but keep on */
 			break;
 	}
@@ -462,14 +513,14 @@ static BOOL _set_line_control(WINPR_COMM *pComm, const SERIAL_LINE_CONTROL *pLin
 			break;
 
 		default:
-			CommLog_Print(WLOG_WARN, "unexpected number od data bits per character: %d\n", pLineControl->WordLength);
+			CommLog_Print(WLOG_WARN, "unexpected number od data bits per character: %"PRIu8"\n", pLineControl->WordLength);
 			result = FALSE; /* but keep on */
 			break;
 	}
 
 	if (_comm_ioctl_tcsetattr(pComm->fd, TCSANOW, &upcomingTermios) < 0)
 	{
-		CommLog_Print(WLOG_WARN, "_comm_ioctl_tcsetattr failure: last-error: 0x%lX", GetLastError());
+		CommLog_Print(WLOG_WARN, "_comm_ioctl_tcsetattr failure: last-error: 0x%08"PRIX32"", GetLastError());
 		return FALSE;
 	}
 
@@ -688,7 +739,7 @@ static BOOL _set_handflow(WINPR_COMM *pComm, const SERIAL_HANDFLOW *pHandflow)
 	// FIXME: could be implemented during read/write I/O
 	if (pHandflow->XonLimit != TTY_THRESHOLD_UNTHROTTLE)
 	{
-		CommLog_Print(WLOG_WARN, "Attempt to set XonLimit with an unsupported value: %lu", pHandflow->XonLimit);
+		CommLog_Print(WLOG_WARN, "Attempt to set XonLimit with an unsupported value: %"PRId32"", pHandflow->XonLimit);
 		SetLastError(ERROR_NOT_SUPPORTED);
 		result = FALSE; /* but keep on */
 	}
@@ -698,7 +749,7 @@ static BOOL _set_handflow(WINPR_COMM *pComm, const SERIAL_HANDFLOW *pHandflow)
 	// FIXME: could be implemented during read/write I/O
 	if (pHandflow->XoffLimit != TTY_THRESHOLD_THROTTLE)
 	{
-		CommLog_Print(WLOG_WARN, "Attempt to set XoffLimit with an unsupported value: %lu", pHandflow->XoffLimit);
+		CommLog_Print(WLOG_WARN, "Attempt to set XoffLimit with an unsupported value: %"PRId32"", pHandflow->XoffLimit);
 		SetLastError(ERROR_NOT_SUPPORTED);
 		result = FALSE; /* but keep on */
 	}
@@ -706,7 +757,7 @@ static BOOL _set_handflow(WINPR_COMM *pComm, const SERIAL_HANDFLOW *pHandflow)
 
 	if (_comm_ioctl_tcsetattr(pComm->fd, TCSANOW, &upcomingTermios) < 0)
 	{
-		CommLog_Print(WLOG_WARN, "_comm_ioctl_tcsetattr failure: last-error: 0x%lX", GetLastError());
+		CommLog_Print(WLOG_WARN, "_comm_ioctl_tcsetattr failure: last-error: 0x%"PRIX32"", GetLastError());
 		return FALSE;
 	}
 
@@ -804,6 +855,12 @@ static BOOL _set_timeouts(WINPR_COMM *pComm, const SERIAL_TIMEOUTS *pTimeouts)
 	pComm->timeouts.WriteTotalTimeoutMultiplier = pTimeouts->WriteTotalTimeoutMultiplier;
 	pComm->timeouts.WriteTotalTimeoutConstant   = pTimeouts->WriteTotalTimeoutConstant;
 
+	CommLog_Print(WLOG_DEBUG, "ReadIntervalTimeout %"PRIu32"", pComm->timeouts.ReadIntervalTimeout);
+	CommLog_Print(WLOG_DEBUG, "ReadTotalTimeoutMultiplier %"PRIu32"", pComm->timeouts.ReadTotalTimeoutMultiplier);
+	CommLog_Print(WLOG_DEBUG, "ReadTotalTimeoutConstant %"PRIu32"", pComm->timeouts.ReadTotalTimeoutConstant);
+	CommLog_Print(WLOG_DEBUG, "WriteTotalTimeoutMultiplier %"PRIu32"", pComm->timeouts.WriteTotalTimeoutMultiplier);
+	CommLog_Print(WLOG_DEBUG, "WriteTotalTimeoutConstant %"PRIu32"", pComm->timeouts.WriteTotalTimeoutConstant);
+
 	return TRUE;
 }
 
@@ -823,7 +880,7 @@ static BOOL _set_lines(WINPR_COMM *pComm, UINT32 lines)
 {
 	if (ioctl(pComm->fd, TIOCMBIS, &lines) < 0)
 	{
-		CommLog_Print(WLOG_WARN, "TIOCMBIS ioctl failed, lines=0x%X, errno=[%d] %s", lines, errno, strerror(errno));
+		CommLog_Print(WLOG_WARN, "TIOCMBIS ioctl failed, lines=0x%"PRIX32", errno=[%d] %s", lines, errno, strerror(errno));
 		SetLastError(ERROR_IO_DEVICE);
 		return FALSE;
 	}
@@ -836,7 +893,7 @@ static BOOL _clear_lines(WINPR_COMM *pComm, UINT32 lines)
 {
 	if (ioctl(pComm->fd, TIOCMBIC, &lines) < 0)
 	{
-		CommLog_Print(WLOG_WARN, "TIOCMBIC ioctl failed, lines=0x%X, errno=[%d] %s", lines, errno, strerror(errno));
+		CommLog_Print(WLOG_WARN, "TIOCMBIC ioctl failed, lines=0x%"PRIX32", errno=[%d] %s", lines, errno, strerror(errno));
 		SetLastError(ERROR_IO_DEVICE);
 		return FALSE;
 	}
@@ -997,11 +1054,19 @@ static BOOL _set_wait_mask(WINPR_COMM *pComm, const ULONG *pWaitMask)
 
 		if (ioctl(pComm->fd, TIOCGICOUNT, &(pComm->counters)) < 0)
 		{
-			CommLog_Print(WLOG_WARN, "TIOCGICOUNT ioctl failed, errno=[%d] %s", errno, strerror(errno));
-			SetLastError(ERROR_IO_DEVICE);
-
-			LeaveCriticalSection(&pComm->EventsLock);
-			return FALSE;
+			CommLog_Print(WLOG_WARN, "TIOCGICOUNT ioctl failed, errno=[%d] %s.", errno, strerror(errno));
+			
+			if (pComm->permissive)
+			{
+				/* counters could not be reset but keep on */
+				ZeroMemory(&(pComm->counters), sizeof(struct serial_icounter_struct));
+			}
+			else
+			{
+				SetLastError(ERROR_IO_DEVICE);
+				LeaveCriticalSection(&pComm->EventsLock);
+				return FALSE;
+			}
 		}
 
 		pComm->PendingEvents = 0;
@@ -1011,7 +1076,7 @@ static BOOL _set_wait_mask(WINPR_COMM *pComm, const ULONG *pWaitMask)
 
 	if (possibleMask != *pWaitMask)
 	{
-		CommLog_Print(WLOG_WARN, "Not all wait events supported (Serial.sys), requested events= 0X%lX, possible events= 0X%lX", *pWaitMask, possibleMask);
+		CommLog_Print(WLOG_WARN, "Not all wait events supported (Serial.sys), requested events= 0x%08"PRIX32", possible events= 0x%08"PRIX32"", *pWaitMask, possibleMask);
 
 		/* FIXME: shall we really set the possibleMask and return FALSE? */
 		pComm->WaitEventMask = possibleMask;
@@ -1043,10 +1108,10 @@ static BOOL _set_queue_size(WINPR_COMM *pComm, const SERIAL_QUEUE_SIZE *pQueueSi
 	/* FIXME: could be implemented on top of N_TTY */
 
 	if (pQueueSize->InSize > N_TTY_BUF_SIZE)
-		CommLog_Print(WLOG_WARN, "Requested an incompatible input buffer size: %lu, keeping on with a %d bytes buffer.", pQueueSize->InSize, N_TTY_BUF_SIZE);
+		CommLog_Print(WLOG_WARN, "Requested an incompatible input buffer size: %"PRIu32", keeping on with a %"PRIu32" bytes buffer.", pQueueSize->InSize, N_TTY_BUF_SIZE);
 
 	if (pQueueSize->OutSize > N_TTY_BUF_SIZE)
-		CommLog_Print(WLOG_WARN, "Requested an incompatible output buffer size: %lu, keeping on with a %d bytes buffer.", pQueueSize->OutSize, N_TTY_BUF_SIZE);
+		CommLog_Print(WLOG_WARN, "Requested an incompatible output buffer size: %"PRIu32", keeping on with a %"PRIu32" bytes buffer.", pQueueSize->OutSize, N_TTY_BUF_SIZE);
 
 	SetLastError(ERROR_CANCELLED);
 	return FALSE;
@@ -1057,7 +1122,7 @@ static BOOL _purge(WINPR_COMM *pComm, const ULONG *pPurgeMask)
 {
 	if ((*pPurgeMask & ~(SERIAL_PURGE_TXABORT | SERIAL_PURGE_RXABORT | SERIAL_PURGE_TXCLEAR | SERIAL_PURGE_RXCLEAR)) > 0)
 	{
-		CommLog_Print(WLOG_WARN, "Invalid purge mask: 0x%lX\n", *pPurgeMask);
+		CommLog_Print(WLOG_WARN, "Invalid purge mask: 0x%"PRIX32"\n", *pPurgeMask);
 		SetLastError(ERROR_INVALID_PARAMETER);
 		return FALSE;
 	}
@@ -1143,11 +1208,22 @@ static BOOL _get_commstatus(WINPR_COMM *pComm, SERIAL_STATUS *pCommstatus)
 	ZeroMemory(&currentCounters, sizeof(struct serial_icounter_struct));
 	if (ioctl(pComm->fd, TIOCGICOUNT, &currentCounters) < 0)
 	{
-		CommLog_Print(WLOG_WARN, "TIOCGICOUNT ioctl failed, errno=[%d] %s", errno, strerror(errno));
-		SetLastError(ERROR_IO_DEVICE);
-
-		LeaveCriticalSection(&pComm->EventsLock);
-		return FALSE;
+		CommLog_Print(WLOG_WARN, "TIOCGICOUNT ioctl failed, errno=[%d] %s.", errno, strerror(errno));
+		CommLog_Print(WLOG_WARN, "  coult not read counters.");
+		
+		if (pComm->permissive)
+		{
+			/* Errors and events based on counters could not be
+			 * detected but keep on.
+			 */
+			ZeroMemory(&currentCounters, sizeof(struct serial_icounter_struct));
+		}
+		else
+		{
+			SetLastError(ERROR_IO_DEVICE);
+			LeaveCriticalSection(&pComm->EventsLock);
+			return FALSE;
+		}
 	}
 
 	/* NB: preferred below (currentCounters.* != pComm->counters.*) over (currentCounters.* > pComm->counters.*) thinking the counters can loop */
@@ -1274,7 +1350,7 @@ static BOOL _get_commstatus(WINPR_COMM *pComm, SERIAL_STATUS *pCommstatus)
 	}
 	else
 	{
-		/* FIXME: "is 80 percent full" from the specs is ambiguous, need to track when it previously occured? */
+		/* FIXME: "is 80 percent full" from the specs is ambiguous, need to track when it previously * occurred? */
 		pComm->PendingEvents &= ~SERIAL_EV_RX80FULL;
 	}
 
@@ -1389,7 +1465,7 @@ static BOOL _wait_on_mask(WINPR_COMM *pComm, ULONG *pOutputMask)
 		Sleep(100); /* 100 ms */
 	}
 
-	CommLog_Print(WLOG_WARN, "_wait_on_mask, unexpected return, WaitEventMask=0X%lX", pComm->WaitEventMask);
+	CommLog_Print(WLOG_WARN, "_wait_on_mask, unexpected return, WaitEventMask=0x%08"PRIX32"", pComm->WaitEventMask);
 	EnterCriticalSection(&pComm->EventsLock);
 	pComm->PendingEvents &= ~SERIAL_EV_FREERDP_WAITING;
 	LeaveCriticalSection(&pComm->EventsLock);

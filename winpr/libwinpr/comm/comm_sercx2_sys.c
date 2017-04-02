@@ -81,7 +81,7 @@ static BOOL _set_wait_mask(WINPR_COMM *pComm, const ULONG *pWaitMask)
 
 	if (possibleMask != *pWaitMask)
 	{
-		CommLog_Print(WLOG_WARN, "Not all wait events supported (SerCx2.sys), requested events= 0X%lX, possible events= 0X%lX", *pWaitMask, possibleMask);
+		CommLog_Print(WLOG_WARN, "Not all wait events supported (SerCx2.sys), requested events= 0x%08"PRIX32", possible events= 0x%08"PRIX32"", *pWaitMask, possibleMask);
 
 		/* FIXME: shall we really set the possibleMask and return FALSE? */
 		pComm->WaitEventMask = possibleMask;
@@ -163,10 +163,10 @@ SERIAL_DRIVER* SerCx2Sys_s()
 	SERIAL_DRIVER* pSerialSys = SerialSys_s();
 	SERIAL_DRIVER* pSerCxSys = SerCxSys_s();
 
-	_SerCx2Sys.set_baud_rate    = pSerCxSys->set_baud_rate;
-	_SerCx2Sys.get_baud_rate    = pSerCxSys->get_baud_rate;
+	_SerCx2Sys.set_baud_rate    = pSerialSys->set_baud_rate;
+	_SerCx2Sys.get_baud_rate    = pSerialSys->get_baud_rate;
 
-	_SerCx2Sys.get_properties   = pSerCxSys->get_properties;
+	_SerCx2Sys.get_properties   = pSerialSys->get_properties;
 
 	_SerCx2Sys.set_line_control = pSerCxSys->set_line_control;
 	_SerCx2Sys.get_line_control = pSerCxSys->get_line_control;
